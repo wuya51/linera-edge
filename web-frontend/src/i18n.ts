@@ -156,6 +156,8 @@ i18n
           "redeemRangeInfo": "赎回金额不能超过投注总额",
           "platformTotalBet": "平台总投注额",
           "activeUsers": "活跃用户",
+          "active": "活跃",
+          "inactive": "非活跃",
           "settledApps": "已结算 dApp",
           "platformPool": "平台奖池",
           "home": "首页",

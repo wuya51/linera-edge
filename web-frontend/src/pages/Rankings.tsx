@@ -4,6 +4,7 @@ import { GET_TOP_APPS, AppRanking } from '../services/graphql'
 import { Loader2 } from 'lucide-react'
 import { useLinera } from '../context/LineraContext'
 import { useTranslation } from 'react-i18next'
+import { formatNumber } from '../utils/formatters'
 
 const Rankings: React.FC = () => {
   const { isConnected } = useLinera()
@@ -73,7 +74,7 @@ const Rankings: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 font-medium text-gray-900">{item.name}</td>
                     <td className="py-3 px-4 text-right font-medium text-gray-900">
-                      {item.totalBet.toLocaleString()} 积分
+                      {formatNumber(item.totalBet)} 积分
                     </td>
                     <td className="py-3 px-4 text-right">
                       <span className={`inline-flex items-center px-2 py-1 rounded text-sm font-medium ${

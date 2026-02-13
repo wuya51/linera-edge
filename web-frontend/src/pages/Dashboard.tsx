@@ -227,8 +227,8 @@ const Dashboard: React.FC = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    {t('active')}
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${dapp.totalBet > 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                    {dapp.totalBet > 0 ? t('active') : t('inactive')}
                   </span>
                 </div>
               </div>
