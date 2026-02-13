@@ -60,8 +60,8 @@ const Profile: React.FC = () => {
   const isLoading = betsLoading || balanceLoading
   
   const totalBets = userBets.length
-  const totalBetAmount = userBets.reduce((sum, bet) => sum + bet.amount, 0)
-  const maxBet = userBets.length > 0 ? Math.max(...userBets.map(bet => bet.amount)) : 0
+  const totalBetAmount = userBets.reduce((sum, bet) => sum + Number(bet.amount), 0)
+  const maxBet = userBets.length > 0 ? Math.max(...userBets.map(bet => Number(bet.amount))) : 0
   const avgBet = userBets.length > 0 ? totalBetAmount / userBets.length : 0
   
   const displayBalance = balanceData?.getBalance || balance || 0

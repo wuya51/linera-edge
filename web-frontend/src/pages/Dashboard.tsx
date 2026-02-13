@@ -71,7 +71,7 @@ const Dashboard: React.FC = () => {
       const poolAmount = poolAmountData.getPoolAmount || 0
       const activeUsers = activeUsersData?.getActiveUsersCount || 0
       
-      const totalBet = topApps.reduce((sum: number, app: AppRanking) => sum + app.totalBet, 0)
+      const totalBet = topApps.reduce((sum: number, app: any) => sum + Number(app.totalBet || 0), 0)
       
       setStats([
         { 
