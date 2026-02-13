@@ -103,35 +103,29 @@ const Betting: React.FC = () => {
       };
     }
 
-    // 对于未投注的用户，使用1积分作为模拟投注金额，确保所有用户看到相同的收益率
     const effectiveBetAmount = userBetAmount > 0 ? userBetAmount : 1;
 
-    // 基于所有应用的总投注计算奖励池
-    const totalBetsAcrossAllApps = allAppsData?.getAllAppsForBetting?.reduce((sum: number, a: any) => sum + (a.totalBet || 0), 0) || app.totalBet;
-    const distributionAmount = (totalBetsAcrossAllApps * 1) / 100;
+    const allApps = allAppsData?.getAllAppsForBetting || [];
+    const topApps = [...allApps].filter(app => app.totalBet > 0).sort((a: any, b: any) => (b.totalBet || 0) - (a.totalBet || 0)).slice(0, 10);
+    const totalBetsAcrossTopApps = topApps.reduce((sum: number, a: any) => sum + (a.totalBet || 0), 0);
     
-    // 排名权重 - 与后端一致
+    const calculationBase = totalBetsAcrossTopApps > 0 ? totalBetsAcrossTopApps : app.totalBet;
+    const distributionAmount = (calculationBase * 1) / 100;
+    
     const rankWeights = [15, 14, 13, 12, 11, 10, 9, 8, 7, 6];
     const appRank = Math.min(app.rank || 1, 10) - 1;
     const rankWeight = appRank < rankWeights.length ? rankWeights[appRank] : 6;
     
-    // 计算所有应用的总权重
-    const totalWeight = rankWeights.reduce((sum, weight) => sum + weight, 0);
+    const baseReward = (distributionAmount * rankWeight) / 100;
     
-    // 基础奖励 - 考虑总权重分配
-    const baseReward = (distributionAmount * rankWeight) / totalWeight;
-    
-    // 支持者奖励 - 与后端一致
     const supportersCount = app.supporters || 0;
     const supporterBonus = Math.min((supportersCount as number) * 1, 10);
     
-    // 中尾部成长奖金 - 与后端一致
     let growthBonus: number = 0;
     if (appRank >= 5) {
-      growthBonus = ((10 - (appRank + 1)) * 1) as number;
+      growthBonus = ((10 - appRank) * 1) as number;
     }
     
-    // 新应用奖励 - 与后端一致
     let newAppBonus: number = 0;
     if (app.addedAt) {
       const now = Date.now();
@@ -142,34 +136,25 @@ const Betting: React.FC = () => {
       }
     }
     
-    // 总奖励系数
     const totalBonus = supporterBonus + growthBonus + newAppBonus;
     const totalReward = baseReward * (100 + totalBonus) / 100;
     
-    // 用户奖励份额
-    const userBetRatio = effectiveBetAmount / app.totalBet;
+    const userBetRatio = app.totalBet === 0 ? 0 : effectiveBetAmount / app.totalBet;
     const userReward = totalReward * userBetRatio;
     
-    // 每日收益限制 - 与后端一致，最高为投注金额的1.5倍
-    const maxDailyEarnings = effectiveBetAmount * 1.5;
-    const actualUserReward = Math.min(userReward, maxDailyEarnings);
+    const minuteRate = isNaN(userReward) || effectiveBetAmount === 0 ? 0 : (userReward / effectiveBetAmount) * 100;
     
-    const minuteRate = (actualUserReward / effectiveBetAmount) * 100;
-    const userBetPercentage = (effectiveBetAmount / app.totalBet) * 100;
-    const adjustmentFactor = Math.max(0.8, 1 - (userBetPercentage / 200));
-    const adjustedMinuteRate = minuteRate * adjustmentFactor;
-    const dailyRate = adjustedMinuteRate * 60 * 24;
+    const dailyRate = minuteRate * 60 * 24;
     
-    // 确保收益率合理
-    const finalRate = Math.max(1, dailyRate); // 最低显示1%的收益率，不设置上限
+    const finalRate = isNaN(dailyRate) ? 0 : dailyRate;
     
     return { 
-      rate: `${finalRate.toFixed(1)}%`,
+      rate: `${finalRate.toFixed(3)}%`,
       details: {
-        totalBets: totalBetsAcrossAllApps,
+        totalBets: totalBetsAcrossTopApps,
+        calculationBase,
         distributionAmount,
         rankWeight,
-        totalWeight,
         baseReward,
         supporterBonus,
         growthBonus,
@@ -180,8 +165,7 @@ const Betting: React.FC = () => {
         userReward,
         minuteRate,
         dailyRate,
-        finalRate,
-        adjustmentFactor
+        finalRate
       }
     };
   };
@@ -238,12 +222,11 @@ const Betting: React.FC = () => {
     const userBet = userBets.find((bet: any) => String(bet.appId) === appId);
     const timestamp = userBet?.timestamp;
     
-    // 检查是否满足1分钟的收益资格要求
     let isEligible = false;
     if (timestamp) {
       try {
         const betTime = parseInt(timestamp);
-        const currentTime = Date.now() * 1000; // 转换为微秒
+        const currentTime = Date.now() * 1000;
         const oneMinuteInMicros = 60 * 1000 * 1000;
         isEligible = currentTime - betTime >= oneMinuteInMicros;
       } catch (error) {
@@ -276,7 +259,6 @@ const Betting: React.FC = () => {
     }
     
     const betAmount = parseInt(amount)
-    // 确保balance是数字类型
     const balanceNum = typeof balance === 'string' ? Number(balance) : balance;
     if (balanceNum === 0) {
       addNotification(t('reloadBalance'), 'info')
@@ -400,13 +382,10 @@ const Betting: React.FC = () => {
     return () => clearInterval(interval)
   }, [])
 
-  // 定期更新用户余额，确保结算后余额能及时更新
   useEffect(() => {
     if (isConnected && account) {
-      // 初始加载时更新一次余额
       refetchBalance()
       
-      // 每5分钟自动更新一次余额
       const balanceUpdateInterval = setInterval(() => {
         refetchBalance()
       }, 5 * 60 * 1000)

@@ -16,7 +16,7 @@ export const formatNumber = (num: any): string => {
   }
   
   if (isNaN(number)) {
-    return '';
+    return '0';
   }
   
   if (number === 0) {
