@@ -170,21 +170,30 @@ export function Leaderboard({ address }: LeaderboardProps): React.ReactNode {
               <button
                 type="button"
                 className={`px-6 py-2 text-sm font-medium ${activeTab === 'daily' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'} border border-gray-200 rounded-l-lg`}
-                onClick={() => setActiveTab('daily')}
+                onClick={() => {
+                  setActiveTab('daily');
+                  refetchDaily();
+                }}
               >
                 {t('dailyLeaderboard')}
               </button>
               <button
                 type="button"
                 className={`px-6 py-2 text-sm font-medium ${activeTab === 'weekly' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'} border-t border-b border-gray-200`}
-                onClick={() => setActiveTab('weekly')}
+                onClick={() => {
+                  setActiveTab('weekly');
+                  refetchWeekly();
+                }}
               >
                 {t('weeklyLeaderboard')}
               </button>
               <button
                 type="button"
                 className={`px-6 py-2 text-sm font-medium ${activeTab === 'monthly' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'} border border-gray-200 rounded-r-lg`}
-                onClick={() => setActiveTab('monthly')}
+                onClick={() => {
+                  setActiveTab('monthly');
+                  refetchMonthly();
+                }}
               >
                 {t('monthlyLeaderboard')}
               </button>

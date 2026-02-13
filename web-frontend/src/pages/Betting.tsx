@@ -96,7 +96,7 @@ const Betting: React.FC = () => {
           totalReward: 0,
           userBetRatio: 0,
           userReward: 0,
-          hourlyRate: 0,
+          minuteRate: 0,
           dailyRate: 0,
           finalRate: 0
         }
@@ -154,18 +154,11 @@ const Betting: React.FC = () => {
     const maxDailyEarnings = effectiveBetAmount * 1.5;
     const actualUserReward = Math.min(userReward, maxDailyEarnings);
     
-    // 每小时收益率
-    const hourlyRate = (actualUserReward / effectiveBetAmount) * 100;
-    
-    // 调整收益率计算，考虑用户投注金额的影响
-    // 当用户投注占比增加时，收益率应该略有下降，反映竞争加剧
-    // 但确保当用户是唯一投注者时，收益率不会过低
+    const minuteRate = (actualUserReward / effectiveBetAmount) * 100;
     const userBetPercentage = (effectiveBetAmount / app.totalBet) * 100;
-    const adjustmentFactor = Math.max(0.8, 1 - (userBetPercentage / 200)); // 最低保持80%的收益率
-    const adjustedHourlyRate = hourlyRate * adjustmentFactor;
-    
-    // 每日收益率
-    const dailyRate = adjustedHourlyRate * 24;
+    const adjustmentFactor = Math.max(0.8, 1 - (userBetPercentage / 200));
+    const adjustedMinuteRate = minuteRate * adjustmentFactor;
+    const dailyRate = adjustedMinuteRate * 60 * 24;
     
     // 确保收益率合理
     const finalRate = Math.max(1, dailyRate); // 最低显示1%的收益率，不设置上限
@@ -185,7 +178,7 @@ const Betting: React.FC = () => {
         totalReward,
         userBetRatio,
         userReward,
-        hourlyRate,
+        minuteRate,
         dailyRate,
         finalRate,
         adjustmentFactor
