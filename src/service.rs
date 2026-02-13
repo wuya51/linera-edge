@@ -4,8 +4,7 @@ use linera_edge::state::{EdgeState, AppInfo};
 use async_graphql::{Object, Request, Response, Schema, SimpleObject, Subscription};
 use linera_sdk::{Service, ServiceRuntime};
 use linera_sdk::abi::WithServiceAbi;
-use linera_sdk::linera_base_types::{AccountOwner, Timestamp};
-use linera_sdk::views::RootView;
+use linera_sdk::linera_base_types::{AccountOwner, Timestamp, Amount};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use serde::{Deserialize, Serialize};
@@ -51,143 +50,7 @@ impl Service for EdgeService {
     }
 }
 
-impl EdgeService {
-    async fn check_and_execute_automatic_settlement(&self) {
-        let mut state = self.state.lock().await;
-        let current_time = self.runtime.system_time();
-        
-        let last_settle_time = match state.get_last_settle_time().await {
-            Ok(time) => time,
-            Err(_) => return,
-        };
-        
-        let one_minute_micros: u64 = 60_000_000;
-        if current_time.micros() - last_settle_time.micros() >= one_minute_micros {
-            let _ = state.check_and_perform_resets(current_time).await;
-            
-            let pool_amount = match state.get_pool_amount().await {
-                Ok(amount) => amount,
-                Err(_) => return,
-            };
-            
-            if pool_amount == 0 {
-                return;
-            }
-            
-            let app_totals = match state.get_all_app_totals().await {
-                Ok(totals) => totals,
-                Err(_) => return,
-            };
-            
-            let mut top_apps: Vec<(String, u64)> = app_totals.into_iter().collect();
-            top_apps.sort_by(|a, b| b.1.cmp(&a.1));
-            let top_apps: Vec<(String, u64)> = top_apps.into_iter().take(10).collect();
-            
-            let reward_weights = [15, 14, 13, 12, 11, 10, 9, 8, 7, 6];
-            
-            let total_bets: u64 = top_apps.iter().map(|(_, amount)| amount).sum();
-            let distribution_amount = if total_bets > 0 {
-                (total_bets * 10) / 100
-            } else {
-                0
-            };
-            
-            let mut has_eligible_bettors = false;
-            
-            if distribution_amount > 0 {
-                for (rank, (app_id, _)) in top_apps.iter().enumerate() {
-                    if rank >= reward_weights.len() {
-                        break;
-                    }
-                    
-                    let bettors = match state.get_app_bettors(app_id).await {
-                        Ok(bettors) => bettors,
-                        Err(_) => continue,
-                    };
-                    
-                    let total_bet_for_app = match state.get_app_total_bet(app_id).await {
-                        Ok(total) => total,
-                        Err(_) => continue,
-                    };
-                    
-                    if total_bet_for_app > 0 {
-                        let mut eligible_bettors = Vec::new();
-                        
-                        for (bettor, amount) in bettors {
-                            match state.user_bets.get(&bettor).await {
-                                Ok(Some(user_bets)) => {
-                                    let has_eligible_bet = user_bets
-                                        .iter()
-                                        .any(|bet| {
-                                            bet.app_id == *app_id && 
-                                            current_time.micros() - bet.timestamp.micros() >= one_minute_micros
-                                        });
-                                    
-                                    if has_eligible_bet {
-                                        eligible_bettors.push((bettor, amount));
-                                        has_eligible_bettors = true;
-                                    }
-                                },
-                                _ => continue,
-                            }
-                        }
-                        
-                        if eligible_bettors.len() > 0 {
-                            let weight = reward_weights[rank];
-                            let base_reward = (distribution_amount * weight as u64) / 100;
-                            
-                            let supporters_count = match state.get_app_supporters_count(app_id).await {
-                                Ok(count) => count,
-                                Err(_) => 1,
-                            };
-                            
-                            let app_info = match state.get_app_info(app_id).await {
-                                Ok(Some(info)) => info,
-                                _ => continue,
-                            };
-                            
-                            let days_since_added = (current_time.micros() - app_info.added_at.micros()) / (24 * 3600_000_000);
-                            
-                            let supporter_bonus = std::cmp::min((supporters_count as u64) * 10, 100);
-                            
-                            let mut growth_bonus: u64 = 0;
-                            if rank >= 5 {
-                                growth_bonus = ((10 - rank) * 5) as u64;
-                            }
-                            
-                            let mut new_app_bonus: u64 = 0;
-                            if days_since_added < 7 {
-                                new_app_bonus = 20;
-                            }
-                            
-                            let total_bonus = supporter_bonus + growth_bonus + new_app_bonus;
-                            let total_reward = base_reward * (100 + total_bonus) / 100;
-                            
-                            let eligible_total_bet: u64 = eligible_bettors.iter().map(|(_, amount)| amount).sum();
-                            
-                            if eligible_total_bet > 0 {
-                                for (bettor, bet_amount) in eligible_bettors {
-                                    let reward_share = (total_reward * bet_amount) / eligible_total_bet;
-                                    let bettor_address = bettor;
-                                    let current_balance = state.get_user_balance(&bettor_address).await.unwrap_or(0);
-                                    let _ = state.update_user_balance(&bettor_address, current_balance + reward_share).await;
-                                    let _ = state.update_user_earnings(&bettor_address, reward_share).await;
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                if has_eligible_bettors && distribution_amount <= pool_amount {
-                    let new_pool = pool_amount - distribution_amount;
-                    let _ = state.update_pool_amount(new_pool).await;
-                }
-            }
-            
-            let _ = state.update_last_settle_time(current_time).await;
-        }
-    }
-}
+
 
 pub struct QueryRoot {
     state: Arc<Mutex<EdgeState>>,
@@ -197,7 +60,7 @@ pub struct QueryRoot {
 #[derive(Clone, Serialize, Deserialize, Debug, SimpleObject)]
 pub struct UserBet {
     pub app_id: String,
-    pub amount: i64,
+    pub amount: Amount,
     pub timestamp: Timestamp,
 }
 
@@ -205,8 +68,8 @@ pub struct UserBet {
 pub struct AppRanking {
     pub app_id: String,
     pub name: String,
-    pub total_bet: u64,
-    pub pool_contribution: u64,
+    pub total_bet: Amount,
+    pub pool_contribution: Amount,
     pub rank: u32,
     pub supporters: u32,
 }
@@ -214,20 +77,20 @@ pub struct AppRanking {
 #[derive(Clone, Serialize, Deserialize, Debug, SimpleObject)]
 pub struct UserRanking {
     pub user: AccountOwner,
-    pub earnings: u64,
+    pub earnings: Amount,
     pub rank: u32,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, SimpleObject)]
 pub struct UserEarningsData {
-    pub daily: u64,
-    pub weekly: u64,
-    pub monthly: u64,
+    pub daily: Amount,
+    pub weekly: Amount,
+    pub monthly: Amount,
 }
 
 #[Object]
 impl QueryRoot {
-    async fn get_balance(&self, owner: Option<AccountOwner>) -> async_graphql::Result<u64> {
+    async fn get_balance(&self, owner: Option<AccountOwner>) -> async_graphql::Result<Amount> {
         let mut state = self.state.lock().await;
         let owner = match owner {
             Some(owner) => owner,
@@ -257,7 +120,7 @@ impl QueryRoot {
         Ok(user_bets)
     }
 
-    async fn get_app_total_bet(&self, app_id: String) -> async_graphql::Result<u64> {
+    async fn get_app_total_bet(&self, app_id: String) -> async_graphql::Result<Amount> {
         let state = self.state.lock().await;
         let total_bet = state.get_app_total_bet(&app_id).await?;
         Ok(total_bet)
@@ -276,11 +139,11 @@ impl QueryRoot {
             .await?;
         
         let app_totals = state.get_all_app_totals().await?;
-        let totals_map: std::collections::HashMap<String, u64> = app_totals.into_iter().collect();
+        let totals_map: std::collections::HashMap<String, Amount> = app_totals.into_iter().collect();
         
         let mut app_rankings = Vec::new();
         for (app_id, app_info) in all_apps {
-            let total_bet = totals_map.get(&app_id).copied().unwrap_or(0);
+            let total_bet = totals_map.get(&app_id).copied().unwrap_or(Amount::ZERO);
             app_rankings.push((app_id, app_info, total_bet));
         }
         
@@ -288,7 +151,7 @@ impl QueryRoot {
         
         let mut rankings = Vec::new();
         for (rank, (app_id, app_info, total_bet)) in app_rankings.into_iter().take(limit as usize).enumerate() {
-            let pool_contribution = state.get_app_pool_contribution(&app_id).await.unwrap_or(0);
+            let pool_contribution = state.get_app_pool_contribution(&app_id).await.unwrap_or(Amount::ZERO);
             let supporters = state.get_app_supporters_count(&app_id).await.unwrap_or(0);
             
             rankings.push(AppRanking {
@@ -304,7 +167,7 @@ impl QueryRoot {
         Ok(rankings)
     }
 
-    async fn get_pool_amount(&self) -> async_graphql::Result<u64> {
+    async fn get_pool_amount(&self) -> async_graphql::Result<Amount> {
         let state = self.state.lock().await;
         let pool_amount = state.get_pool_amount().await?;
         Ok(pool_amount)
@@ -392,12 +255,12 @@ impl QueryRoot {
         
         let app_totals = state.get_all_app_totals().await?;
         
-        let totals_map: std::collections::HashMap<String, u64> = app_totals.into_iter().collect();
+        let totals_map: std::collections::HashMap<String, Amount> = app_totals.into_iter().collect();
         
         let mut rankings = Vec::new();
         for (app_id, app_info) in all_apps {
-            let total_bet = totals_map.get(&app_id).copied().unwrap_or(0);
-            let pool_contribution = state.get_app_pool_contribution(&app_id).await.unwrap_or(0);
+            let total_bet = totals_map.get(&app_id).copied().unwrap_or(Amount::ZERO);
+            let pool_contribution = state.get_app_pool_contribution(&app_id).await.unwrap_or(Amount::ZERO);
             let supporters = state.get_app_supporters_count(&app_id).await.unwrap_or(0);
             
             rankings.push(AppRanking {
@@ -549,7 +412,7 @@ impl MutationRoot {
         _ctx: &async_graphql::Context<'_>,
         caller: AccountOwner,
         app_id: String,
-        amount: u64,
+        amount: Amount,
     ) -> async_graphql::Result<bool> {
         
         let operation = linera_edge::EdgeOperation::Bet {
@@ -568,8 +431,8 @@ impl MutationRoot {
         _ctx: &async_graphql::Context<'_>,
         caller: AccountOwner,
         app_id: String,
-        amount: u64,
-    ) -> async_graphql::Result<u64> {
+        amount: Amount,
+    ) -> async_graphql::Result<Amount> {
         
         let operation = linera_edge::EdgeOperation::Redeem {
             caller,
@@ -579,7 +442,7 @@ impl MutationRoot {
         
         self.runtime.schedule_operation(&operation);
         
-        Ok(0)
+        Ok(Amount::ZERO)
     }
 
     async fn settle(
@@ -601,7 +464,7 @@ impl MutationRoot {
         &self,
         _ctx: &async_graphql::Context<'_>,
         caller: AccountOwner,
-        amount: u64,
+        amount: Amount,
     ) -> async_graphql::Result<bool> {
         
         let operation = linera_edge::EdgeOperation::InjectPool {

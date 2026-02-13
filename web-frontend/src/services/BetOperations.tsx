@@ -338,7 +338,7 @@ const useBetOperations = ({
         variables: {
           caller: formatAccountOwner(currentAccount),
           appId,
-          amount
+          amount: amount.toString()
         }
       });
     } catch (error) {
@@ -357,7 +357,7 @@ const useBetOperations = ({
         variables: {
           caller: formatAccountOwner(currentAccount),
           appId,
-          amount
+          amount: amount.toString()
         }
       });
     } catch (error) {
@@ -413,7 +413,7 @@ const useBetOperations = ({
       await injectPool({
         variables: {
           caller: formatAccountOwner(currentAccount),
-          amount
+          amount: amount.toString()
         }
       });
     } catch (error) {

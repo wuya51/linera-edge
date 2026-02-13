@@ -153,19 +153,19 @@ export const IS_USER_WHITELISTED = gql`
 `;
 
 export const PLACE_BET = gql`
-  mutation PlaceBet($caller: AccountOwner!, $appId: String!, $amount: Int!) {
+  mutation PlaceBet($caller: AccountOwner!, $appId: String!, $amount: String!) {
     placeBet(caller: $caller, appId: $appId, amount: $amount)
   }
 `;
 
 export const REDEEM_BET = gql`
-  mutation RedeemBet($caller: AccountOwner!, $appId: String!, $amount: Int!) {
+  mutation RedeemBet($caller: AccountOwner!, $appId: String!, $amount: String!) {
     redeemBet(caller: $caller, appId: $appId, amount: $amount)
   }
 `;
 
 export const INJECT_POOL = gql`
-  mutation InjectPool($caller: AccountOwner!, $amount: Int!) {
+  mutation InjectPool($caller: AccountOwner!, $amount: String!) {
     injectPool(caller: $caller, amount: $amount)
   }
 `;

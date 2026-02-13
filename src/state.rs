@@ -1,8 +1,9 @@
 use linera_sdk::views::{linera_views, MapView, RegisterView, RootView, View, ViewError};
 use linera_sdk::ViewStorageContext;
 use linera_sdk::views::linera_views::context::Context;
-use linera_sdk::linera_base_types::{AccountOwner, Timestamp};
+use linera_sdk::linera_base_types::{AccountOwner, Timestamp, Amount};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 #[derive(Debug, Deserialize, Serialize, Clone, async_graphql::SimpleObject)]
 pub struct AppInfo {
@@ -16,24 +17,24 @@ pub struct AppInfo {
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct UserBet {
     pub app_id: String,
-    pub amount: i64,
+    pub amount: Amount,
     pub timestamp: Timestamp,
 }
 
 #[derive(RootView)]
 #[view(context = ViewStorageContext)]
 pub struct EdgeState {
-    pub user_balances: MapView<AccountOwner, u64>,
+    pub user_balances: MapView<AccountOwner, Amount>,
     pub user_bets: MapView<AccountOwner, Vec<UserBet>>,
-    pub app_total_bets: MapView<String, u64>,
-    pub app_pool_contributions: MapView<String, u64>,
-    pub pool_amount: RegisterView<u64>,
+    pub app_total_bets: MapView<String, Amount>,
+    pub app_pool_contributions: MapView<String, Amount>,
+    pub pool_amount: RegisterView<Amount>,
     pub last_settle_time: RegisterView<Timestamp>,
     pub owner: RegisterView<Option<AccountOwner>>,
     pub app_info: MapView<String, AppInfo>,
-    pub user_daily_earnings: MapView<AccountOwner, u64>,
-    pub user_weekly_earnings: MapView<AccountOwner, u64>,
-    pub user_monthly_earnings: MapView<AccountOwner, u64>,
+    pub user_daily_earnings: MapView<AccountOwner, Amount>,
+    pub user_weekly_earnings: MapView<AccountOwner, Amount>,
+    pub user_monthly_earnings: MapView<AccountOwner, Amount>,
     pub last_daily_reset: RegisterView<Timestamp>,
     pub last_weekly_reset: RegisterView<Timestamp>,
     pub last_monthly_reset: RegisterView<Timestamp>,
@@ -115,7 +116,7 @@ impl EdgeState {
 
     pub async fn initialize_user_balance(&mut self, owner: &AccountOwner) -> Result<(), ViewError> {
         if !self.user_balances.contains_key(owner).await? {
-            self.user_balances.insert(owner, 50)?;
+            self.user_balances.insert(owner, Amount::from_str("50").unwrap())?;
         }
         Ok(())
     }
@@ -127,44 +128,44 @@ impl EdgeState {
         Ok(is_whitelisted)
     }
 
-    pub async fn get_user_balance(&self, owner: &AccountOwner) -> Result<u64, ViewError> {
+    pub async fn get_user_balance(&self, owner: &AccountOwner) -> Result<Amount, ViewError> {
         match self.user_balances.get(owner).await? {
             Some(balance) => Ok(balance),
-            None => Ok(0),
+            None => Ok(Amount::ZERO),
         }
     }
 
-    pub async fn get_user_balance_with_initialization(&mut self, owner: &AccountOwner) -> Result<u64, ViewError> {
+    pub async fn get_user_balance_with_initialization(&mut self, owner: &AccountOwner) -> Result<Amount, ViewError> {
         let balance = self.user_balances.get(owner).await?;
         match balance {
             Some(balance) => Ok(balance),
             None => {
-                self.user_balances.insert(owner, 50)?;
+                let initial_balance = Amount::from_str("50").unwrap();
+                self.user_balances.insert(owner, initial_balance)?;
                 match self.user_balances.get(owner).await? {
                     Some(balance) => Ok(balance),
                     None => {
-                        Ok(50)
+                        Ok(initial_balance)
                     }
                 }
             }
         }
     }
 
-    pub async fn update_user_balance(&mut self, owner: &AccountOwner, amount: u64) -> Result<(), ViewError> {
+    pub async fn update_user_balance(&mut self, owner: &AccountOwner, amount: Amount) -> Result<(), ViewError> {
         self.user_balances.insert(owner, amount)?;
         Ok(())
     }
 
-    pub async fn get_user_app_bet(&self, owner: &AccountOwner, app_id: &str) -> Result<u64, ViewError> {
+    pub async fn get_user_app_bet(&self, owner: &AccountOwner, app_id: &str) -> Result<Amount, ViewError> {
         match self.user_bets.get(owner).await? {
             Some(user_bets) => {
-                let total_amount: i64 = user_bets.iter()
+                let total_amount = user_bets.iter()
                     .filter(|bet| bet.app_id == app_id)
-                    .map(|bet| bet.amount)
-                    .sum();
-                Ok(total_amount.max(0) as u64)
+                    .fold(Amount::ZERO, |acc, bet| acc.saturating_add(bet.amount));
+                Ok(total_amount)
             },
-            None => Ok(0),
+            None => Ok(Amount::ZERO),
         }
     }
 
@@ -177,7 +178,7 @@ impl EdgeState {
         }
     }
 
-    pub async fn update_user_bet(&mut self, owner: &AccountOwner, app_id: String, amount: i64, timestamp: Timestamp) -> Result<(), ViewError> {
+    pub async fn update_user_bet(&mut self, owner: &AccountOwner, app_id: String, amount: Amount, timestamp: Timestamp) -> Result<(), ViewError> {
         let mut user_bets = match self.user_bets.get(owner).await? {
             Some(bets) => bets.clone(),
             None => Vec::new(),
@@ -198,35 +199,35 @@ impl EdgeState {
         Ok(())
     }
 
-    pub async fn get_app_total_bet(&self, app_id: &str) -> Result<u64, ViewError> {
+    pub async fn get_app_total_bet(&self, app_id: &str) -> Result<Amount, ViewError> {
         match self.app_total_bets.get(app_id).await? {
             Some(amount) => Ok(amount),
-            None => Ok(0),
+            None => Ok(Amount::ZERO),
         }
     }
 
-    pub async fn update_app_total_bet(&mut self, app_id: String, amount: u64) -> Result<(), ViewError> {
+    pub async fn update_app_total_bet(&mut self, app_id: String, amount: Amount) -> Result<(), ViewError> {
         self.app_total_bets.insert(&app_id, amount)?;
         Ok(())
     }
 
-    pub async fn get_app_pool_contribution(&self, app_id: &str) -> Result<u64, ViewError> {
+    pub async fn get_app_pool_contribution(&self, app_id: &str) -> Result<Amount, ViewError> {
         match self.app_pool_contributions.get(app_id).await? {
             Some(amount) => Ok(amount),
-            None => Ok(0),
+            None => Ok(Amount::ZERO),
         }
     }
 
-    pub async fn update_app_pool_contribution(&mut self, app_id: String, amount: u64) -> Result<(), ViewError> {
+    pub async fn update_app_pool_contribution(&mut self, app_id: String, amount: Amount) -> Result<(), ViewError> {
         self.app_pool_contributions.insert(&app_id, amount)?;
         Ok(())
     }
 
-    pub async fn get_pool_amount(&self) -> Result<u64, ViewError> {
+    pub async fn get_pool_amount(&self) -> Result<Amount, ViewError> {
         Ok(*self.pool_amount.get())
     }
 
-    pub async fn update_pool_amount(&mut self, amount: u64) -> Result<(), ViewError> {
+    pub async fn update_pool_amount(&mut self, amount: Amount) -> Result<(), ViewError> {
         self.pool_amount.set(amount);
         Ok(())
     }
@@ -260,7 +261,7 @@ impl EdgeState {
         Ok(())
     }
 
-    pub async fn get_all_app_totals(&self) -> Result<Vec<(String, u64)>, ViewError> {
+    pub async fn get_all_app_totals(&self) -> Result<Vec<(String, Amount)>, ViewError> {
         let mut apps = Vec::new();
         self.app_total_bets
             .for_each_index_value(|app_id, total_bet| {
@@ -271,8 +272,8 @@ impl EdgeState {
         Ok(apps)
     }
 
-    pub async fn get_user_points(&self, owner: &AccountOwner) -> Result<u64, ViewError> {
-        Ok(self.user_balances.get(owner).await?.unwrap_or(0))
+    pub async fn get_user_points(&self, owner: &AccountOwner) -> Result<Amount, ViewError> {
+        Ok(self.user_balances.get(owner).await?.unwrap_or(Amount::ZERO))
     }
 
     pub async fn get_app_info(&self, app_id: &str) -> Result<Option<AppInfo>, ViewError> {
@@ -289,18 +290,17 @@ impl EdgeState {
         Ok(())
     }
 
-    pub async fn get_app_bettors(&self, app_id: &str) -> Result<Vec<(AccountOwner, u64)>, ViewError> {
+    pub async fn get_app_bettors(&self, app_id: &str) -> Result<Vec<(AccountOwner, Amount)>, ViewError> {
         let mut bettors = Vec::new();
         
         self.user_bets
             .for_each_index_value(|owner, user_bets| {
-                let total_amount: i64 = user_bets.iter()
+                let total_amount = user_bets.iter()
                     .filter(|bet| bet.app_id == app_id)
-                    .map(|bet| bet.amount)
-                    .sum();
+                    .fold(Amount::ZERO, |acc, bet| acc.saturating_add(bet.amount));
                 
-                if total_amount > 0 {
-                    bettors.push((owner.clone(), total_amount as u64));
+                if total_amount > Amount::ZERO {
+                    bettors.push((owner.clone(), total_amount));
                 }
                 Ok(())
             })
@@ -326,7 +326,7 @@ impl EdgeState {
         let mut count: u32 = 0;
         self.user_bets
             .for_each_index_value(|_owner, bets| {
-                if bets.iter().any(|bet| bet.app_id == app_id && bet.amount > 0) {
+                if bets.iter().any(|bet| bet.app_id == app_id && bet.amount > Amount::ZERO) {
                     count += 1;
                 }
                 Ok(())
@@ -335,7 +335,7 @@ impl EdgeState {
         Ok(count)
     }
 
-    pub async fn record_user_bet(&mut self, owner: &AccountOwner, app_id: &str, amount: i64, timestamp: Timestamp) -> Result<(), ViewError> {
+    pub async fn record_user_bet(&mut self, owner: &AccountOwner, app_id: &str, amount: Amount, timestamp: Timestamp) -> Result<(), ViewError> {
         let mut bets = self.user_bets.get(owner).await?.unwrap_or_default();
         
         bets.push(UserBet {
@@ -362,32 +362,32 @@ impl EdgeState {
         Ok(())
     }
 
-    pub async fn update_user_points(&mut self, owner: &AccountOwner, points: u64) -> Result<(), ViewError> {
+    pub async fn update_user_points(&mut self, owner: &AccountOwner, points: Amount) -> Result<(), ViewError> {
         self.user_balances.insert(owner, points)?;
         Ok(())
     }
 
-    pub async fn get_user_daily_earnings(&self, owner: &AccountOwner) -> Result<u64, ViewError> {
-        Ok(self.user_daily_earnings.get(owner).await?.unwrap_or(0))
+    pub async fn get_user_daily_earnings(&self, owner: &AccountOwner) -> Result<Amount, ViewError> {
+        Ok(self.user_daily_earnings.get(owner).await?.unwrap_or(Amount::ZERO))
     }
 
-    pub async fn get_user_weekly_earnings(&self, owner: &AccountOwner) -> Result<u64, ViewError> {
-        Ok(self.user_weekly_earnings.get(owner).await?.unwrap_or(0))
+    pub async fn get_user_weekly_earnings(&self, owner: &AccountOwner) -> Result<Amount, ViewError> {
+        Ok(self.user_weekly_earnings.get(owner).await?.unwrap_or(Amount::ZERO))
     }
 
-    pub async fn get_user_monthly_earnings(&self, owner: &AccountOwner) -> Result<u64, ViewError> {
-        Ok(self.user_monthly_earnings.get(owner).await?.unwrap_or(0))
+    pub async fn get_user_monthly_earnings(&self, owner: &AccountOwner) -> Result<Amount, ViewError> {
+        Ok(self.user_monthly_earnings.get(owner).await?.unwrap_or(Amount::ZERO))
     }
 
-    pub async fn update_user_earnings(&mut self, owner: &AccountOwner, amount: u64) -> Result<(), ViewError> {
+    pub async fn update_user_earnings(&mut self, owner: &AccountOwner, amount: Amount) -> Result<(), ViewError> {
         let daily_earnings = self.get_user_daily_earnings(owner).await?;
-        self.user_daily_earnings.insert(owner, daily_earnings + amount)?;
+        self.user_daily_earnings.insert(owner, daily_earnings.saturating_add(amount))?;
         
         let weekly_earnings = self.get_user_weekly_earnings(owner).await?;
-        self.user_weekly_earnings.insert(owner, weekly_earnings + amount)?;
+        self.user_weekly_earnings.insert(owner, weekly_earnings.saturating_add(amount))?;
         
         let monthly_earnings = self.get_user_monthly_earnings(owner).await?;
-        self.user_monthly_earnings.insert(owner, monthly_earnings + amount)?;
+        self.user_monthly_earnings.insert(owner, monthly_earnings.saturating_add(amount))?;
         
         Ok(())
     }
@@ -486,7 +486,7 @@ impl EdgeState {
         Ok(())
     }
 
-    pub async fn get_daily_leaderboard(&self, limit: usize) -> Result<Vec<(AccountOwner, u64)>, ViewError> {
+    pub async fn get_daily_leaderboard(&self, limit: usize) -> Result<Vec<(AccountOwner, Amount)>, ViewError> {
         let mut leaderboard = Vec::new();
         
         self.user_daily_earnings.for_each_index_value(|user, earnings| {
@@ -499,7 +499,7 @@ impl EdgeState {
         Ok(leaderboard.into_iter().take(limit).collect())
     }
 
-    pub async fn get_weekly_leaderboard(&self, limit: usize) -> Result<Vec<(AccountOwner, u64)>, ViewError> {
+    pub async fn get_weekly_leaderboard(&self, limit: usize) -> Result<Vec<(AccountOwner, Amount)>, ViewError> {
         let mut leaderboard = Vec::new();
         
         self.user_weekly_earnings.for_each_index_value(|user, earnings| {
@@ -512,7 +512,7 @@ impl EdgeState {
         Ok(leaderboard.into_iter().take(limit).collect())
     }
 
-    pub async fn get_monthly_leaderboard(&self, limit: usize) -> Result<Vec<(AccountOwner, u64)>, ViewError> {
+    pub async fn get_monthly_leaderboard(&self, limit: usize) -> Result<Vec<(AccountOwner, Amount)>, ViewError> {
         let mut leaderboard = Vec::new();
         
         self.user_monthly_earnings.for_each_index_value(|user, earnings| {

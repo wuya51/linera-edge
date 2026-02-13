@@ -5,6 +5,7 @@ import { useLinera } from '../context/LineraContext'
 import BetOperations from '../services/BetOperations'
 import { AppRanking } from '../services/graphql'
 import { useTranslation } from 'react-i18next'
+import { formatNumber } from '../utils/formatters'
 
 const Dashboard: React.FC = () => {
   const { isConnected, balance, account } = useLinera()
@@ -75,7 +76,7 @@ const Dashboard: React.FC = () => {
       setStats([
         { 
           title: 'platformTotalBet', 
-          value: totalBet.toLocaleString(), 
+          value: formatNumber(totalBet), 
           icon: Coins, 
           color: 'text-green-600', 
           bgColor: 'bg-green-50' 
@@ -96,7 +97,7 @@ const Dashboard: React.FC = () => {
         },
         { 
           title: 'platformPool', 
-          value: poolAmount.toLocaleString(), 
+          value: formatNumber(poolAmount), 
           icon: TrendingUp, 
           color: 'text-orange-600', 
           bgColor: 'bg-orange-50' 
@@ -168,13 +169,13 @@ const Dashboard: React.FC = () => {
             <div>
               <div className="text-xl font-bold flex items-center space-x-4">
                 <div className="flex items-center">
-                  <Coins className="h-5 w-5 mr-2" />
-                  <span className="text-base text-blue-200 mr-1">{t('totalBet')}:</span> <span className="text-xl font-bold">{userBetsData?.getUserBets?.reduce((sum: number, bet: any) => sum + bet.amount, 0) || 0} {t('points')}</span>
-                </div>
-                <div className="flex items-center">
-                  <Wallet className="h-5 w-5 mr-2" />
-                  <span className="text-base text-blue-200 mr-1">{t('availablePoints')}:</span> <span className="text-xl font-bold">{balance} {t('points')}</span>
-                </div>
+                    <Coins className="h-5 w-5 mr-2" />
+                    <span className="text-base text-blue-200 mr-1">{t('totalBet')}:</span> <span className="text-xl font-bold">{formatNumber(userBetsData?.getUserBets?.reduce((sum: number, bet: any) => sum + bet.amount, 0) || 0)} {t('points')}</span>
+                  </div>
+                  <div className="flex items-center">
+                    <Wallet className="h-5 w-5 mr-2" />
+                    <span className="text-base text-blue-200 mr-1">{t('availablePoints')}:</span> <span className="text-xl font-bold">{formatNumber(balance)} {t('points')}</span>
+                  </div>
               </div>
               <div className="flex items-center mt-2">
                 <Gift className="h-4 w-4 mr-2 text-blue-200" />
@@ -222,7 +223,7 @@ const Dashboard: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="font-medium text-gray-900">{dapp.name || dapp.appId}</h3>
-                    <p className="text-sm text-gray-500">{t('totalBet')}: {dapp.totalBet.toLocaleString()} {t('points')}</p>
+                    <p className="text-sm text-gray-500">{t('totalBet')}: {formatNumber(dapp.totalBet)} {t('points')}</p>
                   </div>
                 </div>
                 <div className="text-right">

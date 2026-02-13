@@ -6,6 +6,7 @@ const LanguageSwitcher: React.FC = () => {
 
   const changeLanguage = (lng: string) => {
     i18n.changeLanguage(lng);
+    localStorage.setItem('language', lng);
   };
 
   return (

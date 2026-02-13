@@ -4,16 +4,16 @@ pub mod state;
 
 use serde::{Deserialize, Serialize};
 use linera_sdk::abi::{ContractAbi, ServiceAbi};
-use linera_sdk::linera_base_types::AccountOwner;
+use linera_sdk::linera_base_types::{AccountOwner, Amount};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum EdgeOperation {
-    Bet { caller: AccountOwner, app_id: String, amount: u64 },
-    Redeem { caller: AccountOwner, app_id: String, amount: u64 },
+    Bet { caller: AccountOwner, app_id: String, amount: Amount },
+    Redeem { caller: AccountOwner, app_id: String, amount: Amount },
     Settle { caller: AccountOwner },
     AddApplication { caller: AccountOwner, app_id: String, name: String, description: String },
     RemoveApplication { caller: AccountOwner, app_id: String },
-    InjectPool { caller: AccountOwner, amount: u64 },
+    InjectPool { caller: AccountOwner, amount: Amount },
 }
 
 pub struct EdgeAbi;

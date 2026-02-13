@@ -4,6 +4,7 @@ import { useQuery } from '@apollo/client'
 import { GET_USER_BETS, GET_USER_BALANCE, GET_ALL_APPS, UserBet } from '../services/graphql'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { formatNumber } from '../utils/formatters'
 
 const Profile: React.FC = () => {
   const { isConnected, account, balance } = useLinera()
@@ -107,7 +108,7 @@ const Profile: React.FC = () => {
                   <Loader2 className="h-6 w-6 animate-spin inline" />
                 ) : (
                   <>
-                    {displayBalance} {t('points')} <span className="text-sm text-gray-500 font-normal">({t('availablePoints')})</span>
+                    {formatNumber(displayBalance)} {t('points')} <span className="text-sm text-gray-500 font-normal">({t('availablePoints')})</span>
                   </>
                 )}
               </p>
@@ -130,15 +131,15 @@ const Profile: React.FC = () => {
               <div className="text-sm text-gray-600">{t('betCount')}</div>
             </div>
             <div className="text-center p-4 bg-green-50 rounded-lg">
-              <div className="text-2xl font-bold text-green-600">{totalBetAmount}</div>
+              <div className="text-2xl font-bold text-green-600">{formatNumber(totalBetAmount)}</div>
               <div className="text-sm text-gray-600">{t('totalBet')}</div>
             </div>
             <div className="text-center p-4 bg-purple-50 rounded-lg">
-              <div className="text-2xl font-bold text-purple-600">{maxBet}</div>
+              <div className="text-2xl font-bold text-purple-600">{formatNumber(maxBet)}</div>
               <div className="text-sm text-gray-600">{t('maxBet')}</div>
             </div>
             <div className="text-center p-4 bg-orange-50 rounded-lg">
-              <div className="text-2xl font-bold text-orange-600">{avgBet.toFixed(1)}</div>
+              <div className="text-2xl font-bold text-orange-600">{formatNumber(avgBet)}</div>
               <div className="text-sm text-gray-600">{t('avgBet')}</div>
             </div>
           </div>
@@ -188,7 +189,7 @@ const Profile: React.FC = () => {
                       })()}
                     </div>
                   </div>
-                  <div className="text-lg font-bold text-blue-600">+{bet.amount} {t('points')}</div>
+                  <div className="text-lg font-bold text-blue-600">+{formatNumber(bet.amount)} {t('points')}</div>
                 </div>
               );
             })}

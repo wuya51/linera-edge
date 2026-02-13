@@ -8,6 +8,7 @@ import {
 } from '../services/graphql';
 
 import { useTranslation } from 'react-i18next';
+import { formatNumber } from '../utils/formatters';
 
 interface LeaderboardProps {
   address: string | null;
@@ -147,7 +148,7 @@ export function Leaderboard({ address }: LeaderboardProps): React.ReactNode {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <div className="text-sm text-gray-900">
-                          {app.totalBet} {t('points')}
+                          {formatNumber(app.totalBet)} {t('points')}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -237,7 +238,7 @@ export function Leaderboard({ address }: LeaderboardProps): React.ReactNode {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <div className="text-sm text-gray-900 font-medium">
-                          {entry.earnings}
+                          {formatNumber(entry.earnings)}
                         </div>
                       </td>
                     </tr>

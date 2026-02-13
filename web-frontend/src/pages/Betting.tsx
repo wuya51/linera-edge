@@ -3,6 +3,7 @@ import { useLinera } from '../context/LineraContext'
 import { Loader2, Coins, Wallet, Clock } from 'lucide-react'
 import BetOperations from '../services/BetOperations'
 import { useTranslation } from 'react-i18next'
+import { formatNumber } from '../utils/formatters'
 
 const Betting: React.FC = () => {
   const { isConnected, balance, connectWallet, account, refetchBalance } = useLinera()
@@ -107,7 +108,7 @@ const Betting: React.FC = () => {
 
     // 基于所有应用的总投注计算奖励池
     const totalBetsAcrossAllApps = allAppsData?.getAllAppsForBetting?.reduce((sum: number, a: any) => sum + (a.totalBet || 0), 0) || app.totalBet;
-    const distributionAmount = (totalBetsAcrossAllApps * 10) / 100;
+    const distributionAmount = (totalBetsAcrossAllApps * 1) / 100;
     
     // 排名权重 - 与后端一致
     const rankWeights = [15, 14, 13, 12, 11, 10, 9, 8, 7, 6];
@@ -122,12 +123,12 @@ const Betting: React.FC = () => {
     
     // 支持者奖励 - 与后端一致
     const supportersCount = app.supporters || 0;
-    const supporterBonus = Math.min((supportersCount as number) * 10, 100);
+    const supporterBonus = Math.min((supportersCount as number) * 1, 10);
     
     // 中尾部成长奖金 - 与后端一致
     let growthBonus: number = 0;
     if (appRank >= 5) {
-      growthBonus = ((10 - (appRank + 1)) * 5) as number;
+      growthBonus = ((10 - (appRank + 1)) * 1) as number;
     }
     
     // 新应用奖励 - 与后端一致
@@ -137,7 +138,7 @@ const Betting: React.FC = () => {
       const addedAt = new Date(app.addedAt).getTime();
       const daysSinceAdded = (now - addedAt) / (1000 * 60 * 60 * 24);
       if (daysSinceAdded < 7) {
-        newAppBonus = 20;
+        newAppBonus = 5;
       }
     }
     
@@ -212,8 +213,8 @@ const Betting: React.FC = () => {
   const dApps: AppData[] = allAppsData?.getAllAppsForBetting?.map((app: any) => ({
     id: String(app.appId),
     name: app.name || `App ${app.appId}`,
-    description: app.totalBet > 0 ? `${t('totalBet')}: ${app.totalBet.toLocaleString()} ${t('points')}` : t('noBets'),
-    totalBet: app.totalBet || 0,
+    description: app.totalBet > 0 ? `${t('totalBet')}: ${formatNumber(app.totalBet)} ${t('points')}` : t('noBets'),
+    totalBet: typeof app.totalBet === 'string' ? Number(app.totalBet) : app.totalBet || 0,
     rank: app.rank || 0,
     supporters: app.supporters || 0,
     addedAt: app.addedAt
@@ -244,14 +245,14 @@ const Betting: React.FC = () => {
     const userBet = userBets.find((bet: any) => String(bet.appId) === appId);
     const timestamp = userBet?.timestamp;
     
-    // 检查是否满足1小时的收益资格要求
+    // 检查是否满足1分钟的收益资格要求
     let isEligible = false;
     if (timestamp) {
       try {
         const betTime = parseInt(timestamp);
         const currentTime = Date.now() * 1000; // 转换为微秒
-        const oneHourInMicros = 3600 * 1000 * 1000;
-        isEligible = currentTime - betTime >= oneHourInMicros;
+        const oneMinuteInMicros = 60 * 1000 * 1000;
+        isEligible = currentTime - betTime >= oneMinuteInMicros;
       } catch (error) {
         isEligible = false;
       }
@@ -282,13 +283,15 @@ const Betting: React.FC = () => {
     }
     
     const betAmount = parseInt(amount)
-    if (balance === 0) {
+    // 确保balance是数字类型
+    const balanceNum = typeof balance === 'string' ? Number(balance) : balance;
+    if (balanceNum === 0) {
       addNotification(t('reloadBalance'), 'info')
       refetchBalance()
       return
     }
-    if (betAmount < 1 || betAmount > balance) {
-      addNotification(t('betRange', { balance }), 'error')
+    if (betAmount < 1 || betAmount > balanceNum) {
+      addNotification(t('betRange', { balance: formatNumber(balanceNum) }), 'error')
       return
     }
     
@@ -388,8 +391,8 @@ const Betting: React.FC = () => {
   useEffect(() => {
     const updateCountdown = () => {
       const now = Math.floor(Date.now() / 1000)
-      const nextHour = Math.ceil(now / 3600) * 3600
-      const timeLeft = nextHour - now
+      const nextMinute = Math.ceil(now / 60) * 60
+      const timeLeft = nextMinute - now
       
       const hours = Math.floor(timeLeft / 3600)
       const minutes = Math.floor((timeLeft % 3600) / 60)
@@ -464,11 +467,11 @@ const Betting: React.FC = () => {
             <div className="text-xl font-bold flex items-center space-x-4">
               <div className="flex items-center">
                 <Coins className="h-5 w-5 mr-2" />
-                <span className="text-base text-blue-200 mr-1">{t('totalBet')}:</span> <span className="text-xl font-bold">{userBets.reduce((sum: number, bet: any) => sum + bet.amount, 0)} {t('points')}</span>
+                <span className="text-base text-blue-200 mr-1">{t('totalBet')}:</span> <span className="text-xl font-bold">{formatNumber(userBets.reduce((sum: number, bet: any) => sum + bet.amount, 0))} {t('points')}</span>
               </div>
               <div className="flex items-center">
                 <Wallet className="h-5 w-5 mr-2" />
-                <span className="text-base text-blue-200 mr-1">{t('availablePoints')}:</span> <span className="text-xl font-bold">{balance} {t('points')}</span>
+                <span className="text-base text-blue-200 mr-1">{t('availablePoints')}:</span> <span className="text-xl font-bold">{formatNumber(balance)} {t('points')}</span>
               </div>
             </div>
           </div>
@@ -538,7 +541,7 @@ const Betting: React.FC = () => {
                             <div className="md:w-1/2 mb-3 md:mb-0">
                               <p className="text-sm text-gray-600">
                                 {userHasBet ? (
-                                  `${t('bettingAmount')}: ${userBetsByApp[app.id]} ${t('points')}`
+                                  `${t('bettingAmount')}: ${formatNumber(userBetsByApp[app.id])} ${t('points')}`
                                 ) : (
                                   app.description
                                 )}
@@ -556,7 +559,7 @@ const Betting: React.FC = () => {
                               {app.totalBet > 0 && (
                                 <div>
                                   <div className="text-sm text-gray-600">{t('supporters')}: {app.supporters || 0}</div>
-                                  <div className="text-sm text-gray-600">{t('totalBet')}: {app.totalBet.toLocaleString()}</div>
+                                  <div className="text-sm text-gray-600">{t('totalBet')}: {formatNumber(app.totalBet)}</div>
                                 </div>
                               )}
                             </div>
@@ -629,7 +632,7 @@ const Betting: React.FC = () => {
                         
                         <div className="flex flex-col md:flex-row justify-between mb-4">
                             <div className="md:w-1/2 mb-3 md:mb-0">
-                              <div className="text-sm text-gray-600 mb-1">{String(t('bettingAmount'))}: {bet.amount} {String(t('points'))}</div>
+                              <div className="text-sm text-gray-600 mb-1">{String(t('bettingAmount'))}: {formatNumber(bet.amount)} {String(t('points'))}</div>
                               {bet.timestamp && (
                                 <div className="text-sm text-gray-500 mb-3">
                                   {String(t('betTime'))}: {(() => {
@@ -655,7 +658,7 @@ const Betting: React.FC = () => {
                             </div>
                             <div className="md:w-1/2 md:pl-4">
                               <div className="text-sm text-gray-600">{String(t('supporters'))}: {bet.supporters}</div>
-                              <div className="text-sm text-gray-600">{String(t('totalBet'))}: {bet.totalBet}</div>
+                              <div className="text-sm text-gray-600">{String(t('totalBet'))}: {formatNumber(bet.totalBet)}</div>
                               <div className="text-sm mt-2">
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${bet.isEligible ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                                   {bet.isEligible ? t('eligibleForRewards') : t('notEligibleYet')}
@@ -799,8 +802,8 @@ const Betting: React.FC = () => {
             </div>
             
             <div className="text-sm text-gray-600">
-              <p>{t('currentBalance')}: {balance} {t('points')}</p>
-            </div>
+                              <p>{t('currentBalance')}: {formatNumber(balance)} {t('points')}</p>
+                            </div>
             
             <button
               onClick={() => {
@@ -853,8 +856,8 @@ const Betting: React.FC = () => {
               </div>
               
               <div className="text-sm text-gray-600">
-                <p>{t('betTotal')}: {userBetsByApp[currentRedeemApp] || 0} {t('points')}</p>
-                <p>{t('currentBalance')}: {balance} {t('points')}</p>
+                <p>{t('betTotal')}: {formatNumber(userBetsByApp[currentRedeemApp] || 0)} {t('points')}</p>
+                <p>{t('currentBalance')}: {formatNumber(balance)} {t('points')}</p>
                 <p className="text-orange-500">{t('feeInfo')}</p>
               </div>
               

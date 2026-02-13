@@ -33,12 +33,6 @@ export class DynamicSigner implements Signer {
     try {
       const msgHex: `0x${string}` = `0x${uint8ArrayToHex(value)}`;
 
-      // IMPORTANT: The value parameter is already pre-hashed, and the standard `signMessage`
-      // method would hash it again, resulting in a double-hash. To avoid this, we bypass
-      // the standard signing flow and use `personal_sign` directly on the wallet client.
-      // DO NOT USE: this.dynamicWallet.signMessage(msgHex) - it would cause double-hashing
-
-      // Note: First cast the wallet to an Ethereum wallet to get the wallet client
       if (!isEthereumWallet(this.dynamicWallet)) throw new Error();
       const walletClient = await this.dynamicWallet.getWalletClient();
       const signature = await walletClient.request({
