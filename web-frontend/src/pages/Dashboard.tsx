@@ -170,7 +170,7 @@ const Dashboard: React.FC = () => {
               <div className="text-xl font-bold flex items-center space-x-4">
                 <div className="flex items-center">
                     <Coins className="h-5 w-5 mr-2" />
-                    <span className="text-base text-blue-200 mr-1">{t('totalBet')}:</span> <span className="text-xl font-bold">{formatNumber(userBetsData?.getUserBets?.reduce((sum: number, bet: any) => sum + bet.amount, 0) || 0)} {t('points')}</span>
+                    <span className="text-base text-blue-200 mr-1">{t('totalBet')}:</span> <span className="text-xl font-bold">{formatNumber(userBetsData?.getUserBets?.reduce((sum: number, bet: any) => sum + Number(bet.amount), 0) || 0)} {t('points')}</span>
                   </div>
                   <div className="flex items-center">
                     <Wallet className="h-5 w-5 mr-2" />
