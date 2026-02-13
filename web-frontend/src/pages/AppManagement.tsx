@@ -1,0 +1,536 @@
+import React, { useState, useEffect } from 'react'
+import { Plus, Trash2, Search, CheckCircle, XCircle, Wallet } from 'lucide-react'
+import { useLinera } from '../context/LineraContext'
+import { useQuery, useMutation } from '@apollo/client'
+import { IS_WHITELISTED, ADD_APPLICATION, REMOVE_APPLICATION, GET_ALL_APPS, GET_POOL_AMOUNT } from '../services/graphql'
+import { useTranslation } from 'react-i18next'
+import useBetOperations from '../services/BetOperations'
+
+interface AppInfo {
+  appId: string
+  name: string
+  description: string
+  addedAt: string
+  isActive: boolean
+}
+
+const AppManagement: React.FC = () => {
+  const { isConnected, account } = useLinera()
+  const { t } = useTranslation()
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [showInjectForm, setShowInjectForm] = useState(false)
+  const [newApp, setNewApp] = useState({
+    appId: '',
+    name: '',
+    description: ''
+  })
+  const [injectAmount, setInjectAmount] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [isWhitelisted, setIsWhitelisted] = useState(false)
+  const [whitelistLoading, setWhitelistLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+  const [apps, setApps] = useState<AppInfo[]>([])
+  const [notifications, setNotifications] = useState<Array<{id: string, message: string, type: string}>>([])
+
+  const addNotification = React.useCallback((message: string, type: string = 'info') => {
+    const id = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+    setNotifications(prev => [
+      ...prev,
+      { id, message, type }
+    ])
+    
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id))
+    }, 3000)
+  }, [])
+
+  const handleMutationComplete = React.useCallback((_data: any, mutationType: string) => {
+    let successMessage = 'Operation completed successfully!'
+    if (mutationType === 'injectPool') {
+      successMessage = 'Pool injected successfully!'
+    }
+    addNotification(successMessage, 'success')
+  }, [addNotification])
+
+  const handleMutationError = React.useCallback((error: any) => {
+    const errorMessage = error.message || 'Operation failed'
+    addNotification(`Error: ${errorMessage}`, 'error')
+  }, [addNotification])
+
+  const betOps = useBetOperations({
+    currentAccount: account,
+    onMutationComplete: handleMutationComplete,
+    onMutationError: handleMutationError,
+    currentIsConnected: isConnected
+  })
+
+  const formatAccountOwner = (address: string | null) => {
+    if (!address) return ''
+    const cleanAddress = address.trim().toLowerCase()
+    if (cleanAddress.startsWith('0x')) {
+      return cleanAddress
+    }
+    return `0x${cleanAddress}`
+  }
+
+  const { data: whitelistData, loading: whitelistLoadingQuery, refetch: refetchWhitelist, error: whitelistError } = useQuery(IS_WHITELISTED, {
+    variables: { address: formatAccountOwner(account) },
+    skip: !isConnected || !account,
+    fetchPolicy: 'network-only',
+    nextFetchPolicy: 'network-only'
+  })
+
+  useEffect(() => {
+    if (whitelistError) {
+      setIsWhitelisted(false)
+      setWhitelistLoading(false)
+      const errorMessage = whitelistError.message || JSON.stringify(whitelistError)
+      addNotification(`${t('whitelistCheckError')}: ${errorMessage}`, 'error')
+    } else if (whitelistData) {
+      setIsWhitelisted(whitelistData.isWhitelisted)
+      setWhitelistLoading(false)
+      if (whitelistData.isWhitelisted !== isWhitelisted) {
+        addNotification(`${t('whitelistCheckResult')}: ${whitelistData.isWhitelisted ? t('passed') : t('failed')}`, whitelistData.isWhitelisted ? 'success' : 'error')
+      }
+    } else if (!whitelistLoadingQuery && account) {
+      setTimeout(() => {
+        refetchWhitelist()
+      }, 1000)
+    }
+  }, [whitelistData, whitelistLoadingQuery, whitelistError, account, isWhitelisted])
+
+  const [addApplication] = useMutation(ADD_APPLICATION)
+  const [removeApplication] = useMutation(REMOVE_APPLICATION)
+
+  const { data: appsData, refetch: refetchApps, error: appsError, loading: appsLoading } = useQuery(GET_ALL_APPS, {
+    skip: !isConnected || !isWhitelisted,
+    onError: (error) => {
+      alert('获取应用列表失败: ' + error.message)
+    }
+  })
+
+  const { data: poolAmountData, loading: poolAmountLoading } = useQuery(GET_POOL_AMOUNT, {
+    skip: !isConnected || !isWhitelisted
+  })
+
+  useEffect(() => {
+    if (appsData?.getAllApps) {
+      setApps(appsData.getAllApps)
+    } else if (appsData && !appsData.getAllApps) {
+      setApps([])
+    }
+  }, [appsData])
+  
+  const handleAddApp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!newApp.appId || !newApp.name) {
+      alert(t('pleaseFillAppIdAndName'))
+      return
+    }
+
+    if (!isConnected || !account) {
+      alert(t('connectWallet'))
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const result = await addApplication({
+        variables: {
+          caller: formatAccountOwner(account),
+          appId: newApp.appId,
+          name: newApp.name,
+          description: newApp.description || '',
+        },
+      })
+
+      if (result.data) {
+        addNotification(t('appAddedSuccess'), 'success')
+        setNewApp({ appId: '', name: '', description: '' })
+        setShowAddForm(false)
+        await refetchApps()
+      } else {
+        addNotification(t('appAddFailed'), 'error')
+      }
+      
+    } catch (error) {
+      addNotification(`${t('appAddError')}: ${(error as Error).message}`, 'error')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleRemoveApp = async (appId: string) => {
+    if (!confirm(t('confirmRemoveApp'))) {
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const result = await removeApplication({
+        variables: { 
+          caller: formatAccountOwner(account!),
+          appId 
+        }
+      })
+      
+      if (result.data) {
+        await refetchApps()
+        addNotification(t('appRemovedSuccess'), 'success')
+      } else {
+        addNotification(t('appRemoveFailed'), 'error')
+      }
+      
+    } catch (error) {
+      addNotification(t('appRemoveFailed'), 'error')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleInjectPoolSubmit = async () => {
+    if (!injectAmount || isNaN(parseInt(injectAmount)) || parseInt(injectAmount) < 1) {
+      addNotification(t('enterInjectAmount'), 'error')
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      await betOps.handleInjectPool(parseInt(injectAmount))
+      setTimeout(() => {
+        setInjectAmount('')
+        setIsLoading(false)
+      }, 1500)
+    } catch (error) {
+      addNotification(t('injectPoolFailed'), 'error')
+      setIsLoading(false)
+    }
+  }
+
+  const filteredApps = apps.filter((app: AppInfo) => 
+    app.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    app.appId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    app.description.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-700 mb-4">{t('connectWallet')}</h2>
+          <p className="text-gray-500">{t('connectWalletToManageApps')}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (appsLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold text-gray-700 mb-2">{t('loadingAppData')}</h2>
+          <p className="text-gray-500">{t('fetchingAppList')}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (appsError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <XCircle className="mx-auto h-16 w-16 text-red-500 mb-4" />
+          <h2 className="text-2xl font-bold text-gray-700 mb-2">{t('appDataFetchFailed')}</h2>
+          <p className="text-gray-500">{appsError.message}</p>
+          <button 
+            onClick={() => refetchApps()}
+            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            {t('reload')}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold text-gray-700 mb-2">{t('processing')}</h2>
+          <p className="text-gray-500">{t('pleaseWait')}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (whitelistLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold text-gray-700 mb-2">{t('checkingPermissions')}</h2>
+          <p className="text-gray-500">{t('verifyingWhitelist')}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isWhitelisted) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <XCircle className="mx-auto h-16 w-16 text-red-500 mb-4" />
+          <h2 className="text-2xl font-bold text-gray-700 mb-2">{t('insufficientPermissions')}</h2>
+          <p className="text-gray-500">{t('onlyWhitelistCanManageApps')}</p>
+          <p className="text-gray-400 text-sm mt-2">{t('currentAddress')}: {account}</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="fixed bottom-4 right-4 z-50 space-y-2">
+        {notifications.map(notification => (
+          <div 
+            key={notification.id}
+            className={`px-4 py-3 rounded-lg shadow-lg flex items-center ${notification.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : notification.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}
+          >
+            <span className="mr-2">{notification.type === 'success' ? '✅' : notification.type === 'error' ? '❌' : 'ℹ️'}</span>
+            <span>{notification.message}</span>
+          </div>
+        ))}
+      </div>
+      
+      <div className="max-w-6xl mx-auto px-4">
+
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex-1">
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                <input
+                  type="text"
+                  placeholder={t('searchApps')}
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+                {t('whitelistPermission')} ✓
+              </div>
+              <button
+                onClick={() => setShowAddForm(true)}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                {t('addApp')}
+              </button>
+              <button
+                onClick={() => setShowInjectForm(true)}
+                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                <Wallet className="h-4 w-4" />
+                {t('injectPool')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {showAddForm && (
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h3 className="text-lg font-semibold mb-4">{t('addNewApp')}</h3>
+            <form onSubmit={handleAddApp} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('appId')} *
+                  </label>
+                  <input
+                    type="text"
+                    value={newApp.appId}
+                    onChange={(e) => setNewApp({...newApp, appId: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={t('enterAppId')}
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('appName')} *
+                  </label>
+                  <input
+                    type="text"
+                    value={newApp.name}
+                    onChange={(e) => setNewApp({...newApp, name: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder={t('enterAppName')}
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('appDescription')}
+                </label>
+                <textarea
+                  value={newApp.description}
+                  onChange={(e) => setNewApp({...newApp, description: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder={t('enterAppDescription')}
+                  rows={3}
+                />
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  {t('confirmAdd')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+                >
+                  {t('cancel')}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {showInjectForm && (
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+            <h3 className="text-lg font-semibold mb-4">{t('injectPool')}</h3>
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600">
+                <span className="font-medium">{t('currentPoolBalance')}:</span> {poolAmountLoading ? t('loading') : (poolAmountData?.getPoolAmount || 0)} {t('points')}
+              </p>
+            </div>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              handleInjectPoolSubmit();
+            }} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('injectPoolAmount')} *
+                </label>
+                <input
+                  type="number"
+                  value={injectAmount}
+                  onChange={(e) => setInjectAmount(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder={t('enterInjectAmount')}
+                  min="1"
+                  required
+                />
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+                  disabled={isLoading || betOps.loading.injectPool}
+                >
+                  {isLoading || betOps.loading.injectPool ? t('processing') : t('injectPool')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowInjectForm(false)}
+                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors"
+                  disabled={isLoading || betOps.loading.injectPool}
+                >
+                  {t('cancel')}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          {filteredApps.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-gray-500">
+                {searchTerm ? t('noMatchingApps') : t('noAppData')}
+              </p>
+              <p className="text-gray-400 text-sm mt-2">
+                {searchTerm ? '' : t('appListFetched')}
+              </p>
+              <p className="text-gray-400 text-sm mt-1">
+                {t('pleaseAddFirstApp')}
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200">
+              {filteredApps.map((app: AppInfo) => (
+                <div key={app.appId} className="p-6 hover:bg-gray-50 transition-colors">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-lg font-semibold text-gray-900">{app.name}</h3>
+                        {app.isActive ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <CheckCircle className="h-3 w-3" />
+                            {t('active')}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            <XCircle className="h-3 w-3" />
+                            {t('disabled')}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 mb-1">{t('id')}: {app.appId}</p>
+                      <p className="text-gray-700">{app.description}</p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {t('addedAt')}: {(() => {
+                          try {
+                            const timestamp = parseInt(app.addedAt);
+                            if (isNaN(timestamp)) {
+                              return t('unknown');
+                            }
+                            const milliseconds = timestamp / 1000;
+                            return new Date(milliseconds).toLocaleString();
+                          } catch (error) {
+                            return t('unknown');
+                          }
+                        })()}
+                      </p>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleRemoveApp(app.appId)}
+                        className="flex items-center gap-1 px-3 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+                        title={t('removeApp')}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        {t('remove')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default AppManagement

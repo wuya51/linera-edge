@@ -1,0 +1,31 @@
+[package]
+name = "linera-edge"
+version = "0.1.0"
+authors = ["wuya51 <wuya51@gmail.com>"]
+edition = "2021"
+
+[features]
+test = []
+
+[dependencies]
+async-graphql.workspace = true
+futures.workspace = true
+linera-sdk.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+log.workspace = true
+rand.workspace = true
+getrandom.workspace = true
+tokio = { version = "1.36.0", default-features = false, features = ["rt", "sync"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+linera-sdk = { workspace = true, features = ["test", "wasmer"] }
+tokio = { version = "1.36.0", default-features = false, features = ["rt", "sync"] }
+
+[[bin]]
+name = "linera_edge_contract"
+path = "src/contract.rs"
+
+[[bin]]
+name = "linera_edge_service"
+path = "src/service.rs"
